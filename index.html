@@ -1,0 +1,1612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kalaneri — Management Suite</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<!-- ═══════════════════════════════════════════════════════════
+     FIREBASE SDK  — Paste your config in the SETUP ZONE below
+═══════════════════════════════════════════════════════════ -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, doc, setDoc, getDoc, getDocs,
+         deleteDoc, onSnapshot, query, orderBy }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// ╔══════════════════════════════════════════════════════════╗
+// ║  🔧 SETUP ZONE — PASTE YOUR FIREBASE CONFIG HERE        ║
+// ║  Get this from: Firebase Console → Project Settings     ║
+// ╚══════════════════════════════════════════════════════════╝
+const firebaseConfig = {
+  apiKey:            "AIzaSyBjaQ5cj-C6iMHyXq3RdfAGAN54N0hkEu8",
+  authDomain:        "kalaneri-oms.firebaseapp.com",
+  projectId:         "kalaneri-oms",
+  storageBucket:     "kalaneri-oms.firebasestorage.app",
+  messagingSenderId: "785698895202",
+  appId:             "1:785698895202:web:bca50582e67f8bd560683b",
+  measurementId:     "G-T7Z21D8CZZ"
+};
+// ╔══════════════════════════════════════════════════════════╗
+// ║  END SETUP ZONE — Don't touch anything below this       ║
+// ╚══════════════════════════════════════════════════════════╝
+
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+
+// ── Expose DB helpers to global scope ──
+window.FB = {
+  // Save / overwrite a single document
+  async set(col, id, data) {
+    try {
+      await setDoc(doc(db, col, String(id)), { ...data, _id: String(id) });
+      return true;
+    } catch(e) { console.error('FB.set', e); return false; }
+  },
+  // Get all docs in a collection
+  async getAll(col) {
+    try {
+      const snap = await getDocs(collection(db, col));
+      return snap.docs.map(d => d.data());
+    } catch(e) { console.error('FB.getAll', e); return []; }
+  },
+  // Get one document
+  async get(col, id) {
+    try {
+      const snap = await getDoc(doc(db, col, String(id)));
+      return snap.exists() ? snap.data() : null;
+    } catch(e) { return null; }
+  },
+  // Delete a document
+  async del(col, id) {
+    try {
+      await deleteDoc(doc(db, col, String(id)));
+      return true;
+    } catch(e) { return false; }
+  },
+  // Real-time listener
+  listen(col, callback) {
+    return onSnapshot(collection(db, col), snap => {
+      callback(snap.docs.map(d => d.data()));
+    });
+  }
+};
+
+// Signal app that Firebase is ready
+window._fbReady = true;
+window.dispatchEvent(new Event('fbReady'));
+</script>
+
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --M:#7B1C2E;--Md:#5A1220;--Ml:#9E3045;--Mll:#FDF0F2;
+  --G:#C9993F;--Gl:#E8C870;--Gll:#FDF6E3;
+  --C:#FAF7F2;--O:#F4EFE8;--P:#FFFEFB;
+  --ink:#1A1008;--gr:#6B5E52;--grl:#B0A49A;--grll:#EDE8E2;
+  --green:#2D6A4F;--greenl:#D8F0E6;
+  --red:#B83232;--redl:#FDEAEA;
+  --amb:#C27B0A;--ambl:#FEF3DC;
+  --blu:#1B4F8A;--blul:#E8F0FB;
+  --sh:0 2px 16px rgba(90,18,32,.09);
+  --shl:0 8px 40px rgba(90,18,32,.15);
+  --r:3px;
+}
+html{font-size:15px}
+body{font-family:'DM Sans',sans-serif;background:var(--C);color:var(--ink);min-height:100vh}
+button,input,select,textarea{font-family:'DM Sans',sans-serif}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-thumb{background:var(--G);border-radius:3px}
+
+/* ── LOADING SCREEN ── */
+#loadScreen{
+  position:fixed;inset:0;background:var(--Md);z-index:1000;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+  transition:opacity .4s;
+}
+#loadScreen.hide{opacity:0;pointer-events:none}
+.load-logo{font-family:'Playfair Display',serif;font-size:48px;color:#fff;letter-spacing:8px}
+.load-sub{font-size:11px;color:var(--Gl);letter-spacing:3px;text-transform:uppercase}
+.load-bar{width:200px;height:3px;background:rgba(255,255,255,.15);border-radius:2px;overflow:hidden;margin-top:8px}
+.load-fill{height:100%;background:var(--G);border-radius:2px;animation:loadAnim 1.8s ease-in-out infinite}
+@keyframes loadAnim{0%{width:0%}60%{width:85%}100%{width:100%}}
+.load-msg{font-size:12px;color:rgba(255,255,255,.45);letter-spacing:.5px}
+
+/* ── CONFIG WARNING ── */
+#configWarn{
+  display:none;background:#fff3cd;border:2px solid var(--G);
+  padding:18px 22px;margin:16px;border-radius:var(--r);
+}
+#configWarn h3{color:var(--M);font-size:15px;margin-bottom:8px}
+#configWarn p{font-size:13px;color:var(--gr);line-height:1.7}
+#configWarn code{background:var(--O);padding:2px 7px;font-family:'DM Mono',monospace;font-size:12px;border-radius:2px}
+
+/* ── SHELL ── */
+.shell{display:flex;min-height:100vh}
+
+/* ── SIDEBAR ── */
+.sidebar{
+  width:224px;flex-shrink:0;background:var(--Md);
+  display:flex;flex-direction:column;
+  position:fixed;top:0;left:0;bottom:0;z-index:50;
+  transition:transform .25s ease;
+}
+.sb-logo{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+.sb-mark{width:42px;height:42px;background:var(--G);display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--Md);margin-bottom:9px}
+.sb-name{font-family:'Playfair Display',serif;font-size:17px;color:#fff;font-weight:700}
+.sb-sub{font-size:9px;color:var(--Gl);letter-spacing:2.5px;text-transform:uppercase;margin-top:1px}
+.sb-sec{padding:16px 14px 4px;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.25);font-weight:700}
+.nav{display:flex;align-items:center;gap:10px;padding:9px 14px;margin:1px 8px;border-radius:var(--r);color:rgba(255,255,255,.55);font-size:12.5px;font-weight:500;border:none;background:transparent;width:calc(100% - 16px);text-align:left;cursor:pointer;transition:all .15s;letter-spacing:.2px;white-space:nowrap}
+.nav:hover{background:rgba(255,255,255,.08);color:#fff}
+.nav.on{background:var(--G);color:var(--Md);font-weight:700}
+.nav .ico{font-size:15px;flex-shrink:0;opacity:.75}
+.nav.on .ico{opacity:1}
+.nav .nb{margin-left:auto;background:var(--red);color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:10px}
+.sb-foot{margin-top:auto;padding:14px 16px;border-top:1px solid rgba(255,255,255,.07);font-size:11px;color:rgba(255,255,255,.3);line-height:1.7}
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:49}
+.sb-overlay.on{display:block}
+
+/* ── TOPBAR ── */
+.topbar{background:var(--P);border-bottom:1px solid var(--grll);padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40;box-shadow:0 1px 8px rgba(90,18,32,.05)}
+.hbg{display:none;background:none;border:none;font-size:22px;color:var(--M);cursor:pointer;padding:4px}
+.tb-title{font-family:'Playfair Display',serif;font-size:17px;color:var(--M);font-weight:700}
+.tb-right{display:flex;align-items:center;gap:10px}
+.tb-date{font-size:11px;color:var(--grl);font-family:'DM Mono',monospace}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;margin-right:4px}
+.sync-dot.syncing{background:var(--amb);animation:pulse .8s infinite}
+.sync-dot.err{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── MAIN ── */
+.main{margin-left:224px;flex:1;min-width:0;display:flex;flex-direction:column}
+.view{display:none;padding:22px 24px;flex:1;animation:fadeUp .2s ease}
+.view.on{display:block}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── PAGE HEADER ── */
+.ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;gap:14px;flex-wrap:wrap}
+.pt{font-family:'Playfair Display',serif;font-size:23px;color:var(--M);font-weight:700}
+.ps{font-size:12px;color:var(--grl);margin-top:3px}
+.pt-block::after{content:'';display:block;width:38px;height:3px;background:var(--G);margin-top:8px}
+.pa{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* ── STAT CARDS ── */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:11px;margin-bottom:20px}
+.sc{background:var(--P);border:1px solid var(--grll);padding:14px 16px;box-shadow:var(--sh);border-radius:var(--r);border-top:3px solid var(--G)}
+.sc.cg{border-top-color:var(--green)}.sc.cr{border-top-color:var(--red)}.sc.ca{border-top-color:var(--amb)}.sc.cb{border-top-color:var(--blu)}
+.sv{font-family:'Playfair Display',serif;font-size:26px;font-weight:700;color:var(--M);line-height:1}
+.sc.cg .sv{color:var(--green)}.sc.cr .sv{color:var(--red)}.sc.ca .sv{color:var(--amb)}.sc.cb .sv{color:var(--blu)}
+.sl{font-size:10px;color:var(--grl);letter-spacing:1.5px;text-transform:uppercase;margin-top:5px}
+
+/* ── CARD ── */
+.card{background:var(--P);border:1px solid var(--grll);box-shadow:var(--sh);border-radius:var(--r);margin-bottom:16px;overflow:hidden}
+.ch{padding:13px 18px;border-bottom:1px solid var(--grll);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.ct{font-size:11px;font-weight:700;color:var(--M);letter-spacing:.8px;text-transform:uppercase}
+
+/* ── BUTTONS ── */
+.btn{padding:8px 16px;font-size:11px;font-weight:700;letter-spacing:.4px;border:none;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:5px;text-transform:uppercase;border-radius:var(--r);white-space:nowrap}
+.bp{background:var(--M);color:#fff}.bp:hover{background:var(--Ml)}
+.bg{background:var(--G);color:var(--Md)}.bg:hover{background:var(--Gl)}
+.bo{background:transparent;color:var(--M);border:1.5px solid var(--M)}.bo:hover{background:var(--M);color:#fff}
+.bgh{background:transparent;color:var(--gr);border:1px solid var(--grll);border-radius:var(--r)}.bgh:hover{border-color:var(--M);color:var(--M)}
+.bgr{background:var(--green);color:#fff}.bgr:hover{opacity:.9}
+.bsm{padding:5px 11px;font-size:10px}.bxs{padding:3px 9px;font-size:10px}
+
+/* ── FORMS ── */
+.fr{margin-bottom:14px}
+.fl{display:block;font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--gr);margin-bottom:5px}
+.fi{width:100%;padding:9px 12px;border:1.5px solid var(--grll);background:var(--C);font-size:13px;color:var(--ink);outline:none;transition:border-color .15s;border-radius:var(--r)}
+.fi:focus{border-color:var(--G)}
+.fr2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fr3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+
+/* ── TABLE ── */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{background:var(--M);color:#fff;padding:10px 13px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;text-align:left;white-space:nowrap}
+.tbl td{padding:10px 13px;border-bottom:1px solid var(--grll);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:var(--Gll)}
+.tbl tbody tr:nth-child(even) td{background:var(--O)}
+.tbl tbody tr:nth-child(even):hover td{background:var(--Gll)}
+.tbl tfoot td{background:var(--Md);color:#fff;font-weight:700;padding:11px 13px}
+.mono{font-family:'DM Mono',monospace}
+.bold{font-weight:700}.muted{color:var(--grl);font-size:12px}.center{text-align:center}
+
+/* ── BADGE ── */
+.bdg{display:inline-block;padding:2px 9px;font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;border-radius:20px;white-space:nowrap}
+.bg-g{background:var(--greenl);color:var(--green)}.bg-r{background:var(--redl);color:var(--red)}
+.bg-a{background:var(--ambl);color:var(--amb)}.bg-b{background:var(--blul);color:var(--blu)}
+.bg-gr{background:var(--grll);color:var(--gr)}
+
+/* ── ATT BUTTONS ── */
+.ag{display:flex;gap:3px}
+.ab{padding:5px 9px;font-size:10px;font-weight:700;border:1.5px solid var(--grll);background:var(--C);cursor:pointer;transition:all .12s;text-transform:uppercase;color:var(--gr);border-radius:var(--r);letter-spacing:.3px}
+.ab:hover{border-color:var(--M);color:var(--M)}
+.ab.sP{background:var(--green);border-color:var(--green);color:#fff}
+.ab.sH{background:var(--amb);border-color:var(--amb);color:#fff}
+.ab.sA{background:var(--red);border-color:var(--red);color:#fff}
+.ab.sL{background:var(--gr);border-color:var(--gr);color:#fff}
+
+/* ── MODAL ── */
+.mo{position:fixed;inset:0;background:rgba(20,10,14,.6);z-index:200;display:none;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px)}
+.mo.on{display:flex}
+.mb{background:var(--P);width:100%;max-width:560px;box-shadow:var(--shl);max-height:92vh;overflow-y:auto;border-radius:var(--r);border-top:4px solid var(--G)}
+.mb.wide{max-width:680px}
+.mh{padding:16px 20px;border-bottom:1px solid var(--grll);display:flex;align-items:center;justify-content:space-between}
+.mh h3{font-family:'Playfair Display',serif;font-size:18px;color:var(--M);font-weight:700}
+.mx{background:transparent;border:none;color:var(--gr);font-size:20px;cursor:pointer;padding:4px;line-height:1}.mx:hover{color:var(--red)}
+.md{padding:20px}
+.mf{padding:13px 20px;border-top:1px solid var(--grll);display:flex;gap:8px;justify-content:flex-end}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:20px;right:20px;z-index:300;background:var(--Md);color:#fff;padding:12px 18px;box-shadow:var(--shl);font-size:13px;font-weight:500;display:none;align-items:center;gap:9px;max-width:300px;border-radius:var(--r);border-left:4px solid var(--G)}
+.toast.on{display:flex}.toast.ok{border-left-color:var(--green);background:var(--green)}
+.toast.err{border-left-color:var(--red);background:var(--red)}
+@keyframes sUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.toast.on{animation:sUp .2s ease}
+
+/* ── GALLERY GRID ── */
+.gg{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:15px;padding:16px}
+.pc{background:var(--P);border:1px solid var(--grll);border-radius:var(--r);overflow:hidden;box-shadow:var(--sh);transition:box-shadow .18s}
+.pc:hover{box-shadow:var(--shl)}
+.pi{width:100%;height:170px;object-fit:cover;display:block}
+.pp{width:100%;height:170px;background:linear-gradient(135deg,var(--O),var(--grll));display:flex;align-items:center;justify-content:center;font-size:36px;color:var(--grl)}
+.pinfo{padding:12px 13px}
+.ptt{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pm{font-size:11px;color:var(--gr);margin-bottom:7px}
+.ppr{font-family:'Playfair Display',serif;font-size:17px;font-weight:700;color:var(--M)}
+.pact{display:flex;gap:5px;margin-top:9px;padding-top:9px;border-top:1px solid var(--grll)}
+
+/* ── ALERT ITEMS ── */
+.ali{display:flex;align-items:center;gap:11px;padding:10px 13px;background:var(--C);border:1px solid var(--grll);border-radius:var(--r);border-left:4px solid var(--red);margin-bottom:6px}
+.ali.w{border-left-color:var(--amb)}.ali.i{border-left-color:var(--blu)}
+.ali-dot{width:7px;height:7px;border-radius:50%;background:var(--red);flex-shrink:0}
+.ali.w .ali-dot{background:var(--amb)}.ali.i .ali-dot{background:var(--blu)}
+.ali-txt{font-size:12.5px;flex:1}.ali-txt small{display:block;font-size:11px;color:var(--grl);margin-top:1px}
+.ali-act{font-size:11px;color:var(--M);font-weight:700;white-space:nowrap;background:none;border:none;cursor:pointer}
+
+/* ── HISTORY CALENDAR ── */
+.cal-wrap{overflow-x:auto}
+.calt{border-collapse:collapse;min-width:900px;width:100%;font-size:11px}
+.calt th{background:var(--M);color:#fff;padding:7px 5px;font-size:9px;letter-spacing:1px;text-transform:uppercase;text-align:center;font-weight:700}
+.calt th.nth{text-align:left;min-width:150px;padding:7px 12px}
+.calt td{padding:5px;border:1px solid var(--grll);text-align:center;font-size:11px;font-weight:600}
+.calt td.ntd{text-align:left;font-weight:600;font-size:12px;background:var(--O);padding:6px 11px;white-space:nowrap}
+.cP{background:#c8e6c9;color:#1b5e20}.cH{background:#fff9c4;color:#f57f17}
+.cA{background:#ffcdd2;color:#b71c1c}.cL{background:#e0e0e0;color:#424242}
+.cS{background:var(--grll);color:var(--grl)}.cSum{background:var(--Md);color:#fff;font-weight:700}
+
+/* ── FILTER ROW ── */
+.filtrow{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+.fb{padding:5px 13px;font-size:11px;font-weight:600;border:1.5px solid var(--grll);background:var(--C);cursor:pointer;border-radius:20px;color:var(--gr);transition:all .14s}
+.fb:hover,.fb.on{background:var(--M);color:#fff;border-color:var(--M)}
+.srch{padding:8px 12px;border:1.5px solid var(--grll);background:var(--C);font-size:13px;color:var(--ink);outline:none;border-radius:var(--r);width:200px}
+.srch:focus{border-color:var(--G)}
+
+/* ── SECTION LABEL ── */
+.sec-lbl{background:var(--M);color:#fff;padding:7px 13px;font-size:9px;letter-spacing:2px;text-transform:uppercase;font-weight:700;border-radius:var(--r);margin-bottom:12px;display:inline-block}
+
+/* ── RESPONSIVE ── */
+@media(max-width:768px){
+  .sidebar{transform:translateX(-100%)}.sidebar.on{transform:translateX(0)}
+  .main{margin-left:0}.hbg{display:block}
+  .view{padding:14px}.fr2,.fr3{grid-template-columns:1fr}
+  .stats{grid-template-columns:1fr 1fr}.pa{width:100%}
+}
+@media(max-width:768px){.main{padding-bottom:0}}
+
+/* ── PRINT ── */
+#printZone{display:none}
+@media print{body>*{display:none}#printZone{display:block!important}}
+</style>
+</head>
+<body>
+
+<!-- ── LOADING ── -->
+<div id="loadScreen">
+  <div class="load-logo">KALANERI</div>
+  <div class="load-sub">Management Suite</div>
+  <div class="load-bar"><div class="load-fill"></div></div>
+  <div class="load-msg" id="loadMsg">Connecting to database…</div>
+</div>
+
+<!-- ── CONFIG WARNING (shown if Firebase not set up yet) ── -->
+<div id="configWarn" style="display:none">
+  <h3>⚙️ Firebase Setup Required</h3>
+  <p>Open this file in a text editor and paste your Firebase config in the <code>SETUP ZONE</code> at the top of the file.<br>
+  See the <strong>DEPLOYMENT GUIDE</strong> (separate file) for step-by-step instructions.</p>
+</div>
+
+<div id="appShell" style="display:none">
+
+<!-- ── SIDEBAR ── -->
+<div class="sb-overlay" id="sbOverlay" onclick="closeSB()"></div>
+<aside class="sidebar" id="sidebar">
+  <div class="sb-logo">
+    <div class="sb-mark">K</div>
+    <div class="sb-name">Kalaneri</div>
+    <div class="sb-sub">Management Suite</div>
+  </div>
+  <div class="sb-sec">Overview</div>
+  <button class="nav on" onclick="goTo('dash',this)"><span class="ico">🏠</span>Dashboard</button>
+  <div class="sb-sec">Staff · Module 1</div>
+  <button class="nav" onclick="goTo('att',this)"><span class="ico">📋</span>Daily Attendance</button>
+  <button class="nav" onclick="goTo('sal',this)"><span class="ico">💰</span>Salary Report</button>
+  <button class="nav" onclick="goTo('hist',this)"><span class="ico">📅</span>Att. History</button>
+  <button class="nav" onclick="goTo('staff',this)"><span class="ico">👥</span>Staff Directory</button>
+  <div class="sb-sec">Students · Module 2</div>
+  <button class="nav" onclick="goTo('stud',this)"><span class="ico">🎨</span>Students<span class="nb" id="overdueNb" style="display:none">!</span></button>
+  <button class="nav" onclick="goTo('fees',this)"><span class="ico">💳</span>Fee Collection</button>
+  <button class="nav" onclick="goTo('satt',this)"><span class="ico">✏️</span>Student Att.</button>
+  <div class="sb-sec">Gallery · Module 3</div>
+  <button class="nav" onclick="goTo('inv',this)"><span class="ico">🖼</span>Inventory</button>
+  <div class="sb-foot">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+      <span class="sync-dot" id="syncDot"></span>
+      <span id="syncLbl" style="font-size:10px">Connected</span>
+    </div>
+    Kalaneri · Jaipur<br>Mrs. Saumya Sharma
+  </div>
+</aside>
+
+<!-- ── MAIN CONTENT ── -->
+<div class="main">
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:12px">
+      <button class="hbg" onclick="toggleSB()">☰</button>
+      <div class="tb-title" id="tbTitle">Dashboard</div>
+    </div>
+    <div class="tb-right">
+      <div class="tb-date" id="tbDate"></div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- DASHBOARD                                                   -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="view on" id="v-dash">
+    <div class="ph">
+      <div class="pt-block"><div class="pt">Good Morning, Kalaneri 🌅</div><div class="ps" id="dashDate"></div></div>
+    </div>
+    <div class="stats">
+      <div class="sc cg"><div class="sv" id="ds-pres">—</div><div class="sl">Staff Present Today</div></div>
+      <div class="sc cr"><div class="sv" id="ds-over">—</div><div class="sl">Fee Overdue</div></div>
+      <div class="sc"><div class="sv" id="ds-stud">—</div><div class="sl">Active Students</div></div>
+      <div class="sc ca"><div class="sv mono" id="ds-col">—</div><div class="sl">Collected This Month</div></div>
+      <div class="sc cb"><div class="sv" id="ds-art">—</div><div class="sl">Artworks Available</div></div>
+    </div>
+    <div class="card">
+      <div class="ch"><span class="ct">🔴 Action Required</span></div>
+      <div style="padding:16px"><div id="alertList"><div style="color:var(--grl);font-size:13px">Loading…</div></div></div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- DAILY ATTENDANCE                                            -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="view" id="v-att">
+    <div class="ph">
+      <div class="pt-block"><div class="pt">Daily Attendance</div><div class="ps" id="attLbl"></div></div>
+      <div class="pa">
+        <input type="date" id="attDate" class="fi" style="width:auto" onchange="loadAtt()">
+        <button class="btn bg bsm" onclick="markAllP()">✓ All Present</button>
+        <button class="btn bp bsm" onclick="saveAtt()">💾 Save</button>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="sc cg"><div class="sv" id="aP">0</div><div class="sl">Present</div></div>
+      <div class="sc cr"><div class="sv" id="aA">0</div><div class="sl">Absent</div></div>
+      <div class="sc ca"><div class="sv" id="aH">0</div><div class="sl">Half Day</div></div>
+      <div class="sc"><div class="sv" id="aL">0</div><div class="sl">On Leave</div></div>
+      <div class="sc cr"><div class="sv" id="aN">0</div><div class="sl">Unmarked</div></div>
+    </div>
+    <div class="card">
+      <div class="ch"><span class="ct">Attendance Register</span>
+        <div style="font-size:10px;color:var(--grl);display:flex;gap:10px;flex-wrap:wrap">
+          <span>🟢 P=Present</span><span>🟡 H=Half</span><span>🔴 A=Absent</span><span>⚫ L=Leave</span>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="tbl"><thead><tr><th style="width:36px">#</th><th>Name & Role</th><th>Status</th><th>Note</th></tr></thead>
+        <tbody id="attBody"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- SALARY                                                      -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="view" id="v-sal">
+    <div class="ph">
+      <div class="pt-block"><div class="pt">Salary Report</div><div class="ps">Auto-calculated from attendance</div></div>
+      <div class="pa">
+        <input type="month" id="salMon" class="fi" style="width:auto" onchange="loadSal()">
+        <select id="slipSel" class="fi" style="width:auto;padding:8px 10px;font-size:12px"><option value="">Print Salary Slip →</option></select>
+        <button class="btn bp bsm" onclick="printSlip()">🖨 Slip</button>
+        <button class="btn bo bsm" onclick="window.print()">🖨 Report</button>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="sc cg"><div class="sv mono" id="salTot">₹0</div><div class="sl">Total Payable</div></div>
+      <div class="sc cr"><div class="sv mono" id="salDed">₹0</div><div class="sl">Deductions</div></div>
+      <div class="sc"><div class="sv" id="salWD">0</div><div class="sl">Working Days</div></div>
+      <div class="sc"><div class="sv" id="salSt">0</div><div class="sl">Staff</div></div>
+    </div>
+    <div class="card">
+      <div class="ch"><span class="ct" id="salLbl">Salary Sheet</span></div>
+      <div style="overflow-x:auto">
+        <table class="tbl" style="min-width:760px">
+          <thead><tr><th>#</th><th>Name</th><th>Role</th><th>Gross</th><th>Working Days</th><th>Present</th><th>Half</th><th>Absent</th><th>Deduction</th><th>Net Payable</th><th>Att%</th></tr></thead>
+          <tbody id="salBody"></tbody>
+          <tfoot><tr><td colspan="9">TOTAL PAYABLE</td><td id="salFoot" class="mono">₹0</td><td></td></tr></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- ATT HISTORY                                                 -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="view" id="v-hist">
+    <div class="ph">
+      <div class="pt-block"><div class="pt">Attendance History</div><div class="ps">Full month view</div></div>
+      <div class="pa">
+        <input type="month" id="histMon" class="fi" style="width:auto" onchange="loadHist()">
+        <button class="btn bo bsm" onclick="exportCSV()">↓ Export CSV</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="ch"><span class="ct" id="histLbl">Calendar</span></div>
+      <div class="cal-wrap"><table class="calt"><thead id="calH"></thead><tbody id="calB"></tbody></table></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div class="ch"><span class="ct">Month Summary</span></div>
+      <div style="overflow-x:auto">
+        <table class="tbl"><thead><tr><th>#</th><th>Name</th><th>Role</th><th>P</th><th>H</th><th>A</th><th>L</th><th>Att%</th><th>Status</th></tr></thead>
+        <tbody id="histSum"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- STAFF DIRECTORY                                             -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="view" id="v-staff">
+    <div class="ph">
+      <div class="pt-block"><div class="pt">Staff Directory</div><div class="ps" id="staffCnt"></div></div>
+      <div class="pa"><button class="btn bp" onclick="openStaffMo()">+ Add Staff</button></div>
+    </div>
+    <div class="card">
+      <div style="overflow-x:auto">
+        <table class="tbl" id="staffTbl">
+          <thead><tr><th>#</th><th>Name</th><th>Role</th><th>Dept</th><th>Monthly Salary</th><th>Mobile</th><th>Joined</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="staffBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- STUDENTS                                                    -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="view" id="v-stud">
+    <div class="ph">
+      <div class="pt-block"><div class="pt">Students</div><div class="ps" id="studCnt"></div></div>
+      <div class="pa">
+        <input class="srch" placeholder="🔍 Search…" id="studSrch" oninput="renderStudents()">
+        <button class="btn bp" onclick="openStudMo()">+ Add Student</button>
+      </div>
+    </div>
+    <div class="filtrow" id="studFilts">
+      <button class="fb on" onclick="setSF('all',this)">All</button>
+      <button class="fb" onclick="setSF('overdue',this)">🔴 Overdue</button>
+      <button class="fb" onclick="setSF('paid',this)">🟢 Paid</button>
+      <button class="fb" onclick="setSF('due-soon',this)">🟡 Due Soon</button>
+    </div>
+    <div class="stats">
+      <div class="sc"><div class="sv" id="stT">0</div><div class="sl">Total Students</div></div>
+      <div class="sc cg"><div class="sv mono" id="stC">₹0</div><div class="sl">Collected This Month</div></div>
+      <div class="sc cr"><div class="sv mono" id="stOA">₹0</div><div class="sl">Overdue Amount</div></div>
+      <div class="sc cr"><div class="sv" id="stOC">0</div><div class="sl">Overdue Students</div></div>
+    </div>
+    <div class="card">
+      <div style="overflow-x:auto">
+        <table class="tbl" style="min-width:900px">
+          <thead><tr><th>#</th><th>Student & Parent</th><th>Course / Batch</th><th>Teacher</th><th>Fee/Month</th><th>Due Day</th><th>Last Paid</th><th>Status</th><th>Balance</th><th>Actions</th></tr></thead>
+          <tbody id="studBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- FEE COLLECTION                                              -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="view" id="v-fees">
+    <div class="ph">
+      <div class="pt-block"><div class="pt">Fee Collection</div><div class="ps">Payment records</div></div>
+      <div class="pa"><input type="month" id="feeMon" class="fi" style="width:auto" onchange="loadFees()"></div>
+    </div>
+    <div class="stats">
+      <div class="sc cg"><div class="sv mono" id="fCol">₹0</div><div class="sl">Collected</div></div>
+      <div class="sc cr"><div class="sv mono" id="fPen">₹0</div><div class="sl">Pending</div></div>
+      <div class="sc"><div class="sv" id="fTxn">0</div><div class="sl">Transactions</div></div>
+      <div class="sc ca"><div class="sv mono" id="fExp">₹0</div><div class="sl">Expected Total</div></div>
+    </div>
+    <div class="card">
+      <div style="overflow-x:auto">
+        <table class="tbl" style="min-width:700px">
+          <thead><tr><th>#</th><th>Date</th><th>Student</th><th>Amount</th><th>Mode</th><th>For Month</th><th>Note</th><th>Del</th></tr></thead>
+          <tbody id="feeBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- STUDENT ATTENDANCE                                          -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="view" id="v-satt">
+    <div class="ph">
+      <div class="pt-block"><div class="pt">Student Attendance</div><div class="ps" id="sattLbl"></div></div>
+      <div class="pa">
+        <input type="date" id="sattDate" class="fi" style="width:auto" onchange="loadSAtt()">
+        <button class="btn bg bsm" onclick="markAllSP()">✓ All Present</button>
+        <button class="btn bp bsm" onclick="saveSAtt()">💾 Save</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="ch"><span class="ct">Class Register</span></div>
+      <div style="overflow-x:auto">
+        <table class="tbl"><thead><tr><th>#</th><th>Student</th><th>Course / Batch</th><th>Status</th></tr></thead>
+        <tbody id="sattBody"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- PAINTING INVENTORY                                          -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="view" id="v-inv">
+    <div class="ph">
+      <div class="pt-block"><div class="pt">Painting Inventory</div><div class="ps" id="invCnt"></div></div>
+      <div class="pa">
+        <select class="fi bsm" style="width:auto;padding:7px 10px;font-size:12px" id="invFilt" onchange="renderInv()">
+          <option value="all">All</option><option>Available</option><option>Sold</option><option>Reserved</option><option>On Display</option>
+        </select>
+        <button class="btn bp" onclick="openPaintMo()">+ Add Painting</button>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="sc"><div class="sv" id="invT">0</div><div class="sl">Total</div></div>
+      <div class="sc cg"><div class="sv" id="invA">0</div><div class="sl">Available</div></div>
+      <div class="sc cr"><div class="sv" id="invS">0</div><div class="sl">Sold</div></div>
+      <div class="sc ca"><div class="sv mono" id="invV">₹0</div><div class="sl">Available Value</div></div>
+    </div>
+    <div class="gg" id="invGrid"></div>
+  </div>
+
+</div><!-- end .main -->
+</div><!-- end #appShell -->
+
+<!-- ═══ MODALS ═══════════════════════════════════════════════════════════ -->
+<!-- Staff Modal -->
+<div class="mo" id="moStaff">
+  <div class="mb">
+    <div class="mh"><h3 id="moStaffT">Add Staff</h3><button class="mx" onclick="closeMo('moStaff')">✕</button></div>
+    <div class="md">
+      <input type="hidden" id="sf-id">
+      <div class="fr"><label class="fl">Full Name *</label><input class="fi" id="sf-n" placeholder="e.g. Priya Sharma"></div>
+      <div class="fr2">
+        <div class="fr" style="margin:0"><label class="fl">Role *</label><input class="fi" id="sf-r" placeholder="e.g. Art Teacher"></div>
+        <div class="fr" style="margin:0"><label class="fl">Department</label>
+          <select class="fi" id="sf-d"><option>Teaching</option><option>Administration</option><option>Gallery</option><option>Support</option></select></div>
+      </div>
+      <div class="fr2">
+        <div class="fr" style="margin:0"><label class="fl">Monthly Salary (₹) *</label><input class="fi" id="sf-s" type="number" placeholder="30000"></div>
+        <div class="fr" style="margin:0"><label class="fl">Joining Date</label><input class="fi" id="sf-j" type="date"></div>
+      </div>
+      <div class="fr2">
+        <div class="fr" style="margin:0"><label class="fl">Mobile</label><input class="fi" id="sf-m" placeholder="9XXXXXXXXX" maxlength="10"></div>
+        <div class="fr" style="margin:0"><label class="fl">Bank Account</label><input class="fi" id="sf-b" placeholder="Account number"></div>
+      </div>
+    </div>
+    <div class="mf"><button class="btn bgh" onclick="closeMo('moStaff')">Cancel</button><button class="btn bp" onclick="saveStaff()">Save Staff</button></div>
+  </div>
+</div>
+
+<!-- Student Modal -->
+<div class="mo" id="moStud">
+  <div class="mb wide">
+    <div class="mh"><h3 id="moStudT">Add Student</h3><button class="mx" onclick="closeMo('moStud')">✕</button></div>
+    <div class="md">
+      <input type="hidden" id="st-id">
+      <div class="sec-lbl">👤 Student Details</div>
+      <div class="fr3">
+        <div class="fr" style="margin:0"><label class="fl">Student Name *</label><input class="fi" id="st-n" placeholder="Full name"></div>
+        <div class="fr" style="margin:0"><label class="fl">Age</label><input class="fi" id="st-a" type="number" placeholder="12"></div>
+        <div class="fr" style="margin:0"><label class="fl">Joining Date</label><input class="fi" id="st-j" type="date"></div>
+      </div>
+      <div class="sec-lbl" style="margin-top:14px">📞 Parent / Guardian</div>
+      <div class="fr2">
+        <div class="fr" style="margin:0"><label class="fl">Parent Name</label><input class="fi" id="st-pn" placeholder="Parent full name"></div>
+        <div class="fr" style="margin:0"><label class="fl">Parent Mobile *</label><input class="fi" id="st-m" placeholder="9XXXXXXXXX" maxlength="10"></div>
+      </div>
+      <div class="fr2">
+        <div class="fr" style="margin:0"><label class="fl">Student Mobile</label><input class="fi" id="st-sm" placeholder="Optional"></div>
+        <div class="fr" style="margin:0"><label class="fl">Area / Address</label><input class="fi" id="st-addr" placeholder="e.g. Vaishali Nagar"></div>
+      </div>
+      <div class="sec-lbl" style="margin-top:14px">🎨 Course & Batch</div>
+      <div class="fr2">
+        <div class="fr" style="margin:0"><label class="fl">Course *</label>
+          <select class="fi" id="st-c" onchange="autoFee()">
+            <option value="Foundation">Foundation (Basics)</option>
+            <option value="Studio">Studio (Intermediate)</option>
+            <option value="Atelier">Atelier (Advanced)</option>
+            <option value="Custom">Custom</option>
+          </select></div>
+        <div class="fr" style="margin:0"><label class="fl">Batch / Timing *</label>
+          <select class="fi" id="st-bt">
+            <option>Mon-Wed-Fri · 10am–12pm</option>
+            <option>Mon-Wed-Fri · 2pm–4pm</option>
+            <option>Mon-Wed-Fri · 5pm–7pm</option>
+            <option>Tue-Thu-Sat · 10am–12pm</option>
+            <option>Tue-Thu-Sat · 2pm–4pm</option>
+            <option>Tue-Thu-Sat · 5pm–7pm</option>
+            <option>Weekend · Sat-Sun 10am–1pm</option>
+            <option>Custom Timing</option>
+          </select></div>
+      </div>
+      <div class="fr3">
+        <div class="fr" style="margin:0"><label class="fl">Monthly Fee (₹) *</label><input class="fi" id="st-f" type="number" placeholder="2500"></div>
+        <div class="fr" style="margin:0"><label class="fl">Due Day (of month)</label><input class="fi" id="st-dd" type="number" placeholder="1" min="1" max="28"></div>
+        <div class="fr" style="margin:0"><label class="fl">Speciality Medium</label>
+          <select class="fi" id="st-med">
+            <option value="">Not decided</option><option>Drawing & Sketching</option>
+            <option>Watercolour</option><option>Acrylic</option><option>Oil</option>
+            <option>Folk Art</option><option>Mixed Media</option>
+          </select></div>
+      </div>
+      <div class="fr2">
+        <div class="fr" style="margin:0"><label class="fl">Assigned Teacher</label><input class="fi" id="st-t" placeholder="e.g. Priya Sharma"></div>
+        <div class="fr" style="margin:0"><label class="fl">Progress Level</label>
+          <select class="fi" id="st-pr">
+            <option>Beginner</option><option>Elementary</option>
+            <option>Intermediate</option><option>Advanced</option><option>Professional</option>
+          </select></div>
+      </div>
+      <div class="fr"><label class="fl">Notes</label><input class="fi" id="st-nt" placeholder="Any special notes about the student"></div>
+    </div>
+    <div class="mf"><button class="btn bgh" onclick="closeMo('moStud')">Cancel</button><button class="btn bp" onclick="saveStudent()">Save Student</button></div>
+  </div>
+</div>
+
+<!-- Payment Modal -->
+<div class="mo" id="moPay">
+  <div class="mb" style="max-width:400px">
+    <div class="mh"><h3>Record Payment</h3><button class="mx" onclick="closeMo('moPay')">✕</button></div>
+    <div class="md">
+      <input type="hidden" id="py-sid">
+      <div class="fr"><label class="fl">Student</label><input class="fi" id="py-sn" readonly style="background:var(--O)"></div>
+      <div class="fr2">
+        <div class="fr" style="margin:0"><label class="fl">Amount (₹) *</label><input class="fi" id="py-a" type="number" placeholder="2500"></div>
+        <div class="fr" style="margin:0"><label class="fl">Mode</label>
+          <select class="fi" id="py-m"><option>Cash</option><option>UPI</option><option>Bank Transfer</option><option>Cheque</option></select></div>
+      </div>
+      <div class="fr2">
+        <div class="fr" style="margin:0"><label class="fl">Date</label><input class="fi" id="py-d" type="date"></div>
+        <div class="fr" style="margin:0"><label class="fl">For Month</label><input class="fi" id="py-mo" type="month"></div>
+      </div>
+      <div class="fr"><label class="fl">Note / Reference</label><input class="fi" id="py-n" placeholder="UPI ref, cheque no…"></div>
+    </div>
+    <div class="mf"><button class="btn bgh" onclick="closeMo('moPay')">Cancel</button><button class="btn bgr" onclick="savePay()">✓ Confirm Payment</button></div>
+  </div>
+</div>
+
+<!-- Painting Modal -->
+<div class="mo" id="moPaint">
+  <div class="mb wide">
+    <div class="mh"><h3 id="moPaintT">Add Painting</h3><button class="mx" onclick="closeMo('moPaint')">✕</button></div>
+    <div class="md">
+      <input type="hidden" id="pt-id">
+      <div class="fr"><label class="fl">Painting Photo</label>
+        <input type="file" accept="image/*" id="pt-ph" onchange="prevPhoto()" class="fi" style="padding:6px">
+        <div id="pt-prev" style="margin-top:8px;display:none"><img id="pt-prev-img" style="max-width:100%;max-height:150px;object-fit:cover;border:1px solid var(--grll)"></div>
+      </div>
+      <div class="fr2">
+        <div class="fr" style="margin:0"><label class="fl">Title *</label><input class="fi" id="pt-t" placeholder="e.g. Rajasthani Sunset"></div>
+        <div class="fr" style="margin:0"><label class="fl">Artist Name *</label><input class="fi" id="pt-ar" placeholder="Artist full name"></div>
+      </div>
+      <div class="fr3">
+        <div class="fr" style="margin:0"><label class="fl">Medium *</label>
+          <select class="fi" id="pt-m"><option>Painting</option><option>Watercolour</option><option>Acrylic</option><option>Oil</option><option>Sketch</option><option>Folk Art</option><option>Mixed Media</option><option>Other</option></select></div>
+        <div class="fr" style="margin:0"><label class="fl">Size (inches)</label><input class="fi" id="pt-sz" placeholder='18"×24"'></div>
+        <div class="fr" style="margin:0"><label class="fl">Year</label><input class="fi" id="pt-yr" type="number" placeholder="2024"></div>
+      </div>
+      <div class="fr2">
+        <div class="fr" style="margin:0"><label class="fl">Price (₹) *</label><input class="fi" id="pt-pr" type="number" placeholder="8500"></div>
+        <div class="fr" style="margin:0"><label class="fl">Status</label>
+          <select class="fi" id="pt-st"><option>Available</option><option>Reserved</option><option>On Display</option><option>Sold</option></select></div>
+      </div>
+      <div class="fr"><label class="fl">Description (for customer gallery)</label>
+        <input class="fi" id="pt-d" placeholder="Brief description of the artwork…"></div>
+    </div>
+    <div class="mf"><button class="btn bgh" onclick="closeMo('moPaint')">Cancel</button><button class="btn bp" onclick="savePaint()">Save Painting</button></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"><span id="toastMsg"></span></div>
+<!-- Print zone -->
+<div id="printZone"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// WAIT FOR FIREBASE, THEN BOOT
+// ═══════════════════════════════════════════════════════════════
+function boot() {
+  // Check if Firebase config is still placeholder
+  if (typeof window.FB === 'undefined') {
+    document.getElementById('loadScreen').classList.add('hide');
+    document.getElementById('configWarn').style.display = 'block';
+    return;
+  }
+  document.getElementById('loadMsg').textContent = 'Loading data…';
+  setTimeout(() => {
+    document.getElementById('loadScreen').classList.add('hide');
+    document.getElementById('appShell').style.display = 'flex';
+    initApp();
+  }, 800);
+}
+
+if (window._fbReady) boot();
+else window.addEventListener('fbReady', boot);
+
+// Fallback: if Firebase module fails (wrong config), show config warning
+window.addEventListener('error', (e) => {
+  if (e.message && e.message.includes('firebase')) {
+    document.getElementById('loadScreen').classList.add('hide');
+    document.getElementById('configWarn').style.display = 'block';
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// LOCAL CACHE — keeps UI fast while Firebase syncs
+// ═══════════════════════════════════════════════════════════════
+const CACHE = {
+  staff: [], students: [], payments: [], paintings: [], progress: [],
+  att: {},  // { 'YYYY-MM-DD': { staffId: {status,note} } }
+  satt: {}  // { 'YYYY-MM-DD': { studentId: {status} } }
+};
+
+// Sync status
+function setSyncing(){ document.getElementById('syncDot').className='sync-dot syncing'; document.getElementById('syncLbl').textContent='Saving…'; }
+function setSynced(){  document.getElementById('syncDot').className='sync-dot';          document.getElementById('syncLbl').textContent='Synced'; }
+function setSyncErr(){ document.getElementById('syncDot').className='sync-dot err';      document.getElementById('syncLbl').textContent='Offline — data saved locally'; }
+
+// ═══════════════════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════════════════
+const today = () => new Date().toISOString().split('T')[0];
+const curMon = () => new Date().toISOString().substring(0,7);
+function fmtDate(d){ return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) }
+function fmtShort(d){ return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) }
+function fmtMon(ym){ const[y,m]=ym.split('-'); return new Date(y,m-1,1).toLocaleDateString('en-IN',{month:'long',year:'numeric'}) }
+function wDays(ym){ const[y,m]=ym.split('-').map(Number); const d=new Date(y,m,0).getDate(); let c=0; for(let i=1;i<=d;i++) if(new Date(y,m-1,i).getDay()!==0)c++; return c; }
+function dimMon(ym){ const[y,m]=ym.split('-').map(Number); return new Date(y,m,0).getDate(); }
+function inr(n){ return '₹'+Number(n||0).toLocaleString('en-IN'); }
+function nid(arr){ return arr.length ? Math.max(...arr.map(x=>parseInt(x._id||x.id||0)))+1 : 1; }
+function uid(){ return Date.now()+'_'+Math.random().toString(36).slice(2,8); }
+
+// ═══════════════════════════════════════════════════════════════
+// SEED DEFAULT DATA
+// ═══════════════════════════════════════════════════════════════
+async function seedIfEmpty() {
+  const existing = await window.FB.getAll('staff');
+  if (existing.length > 0) return; // Already has data
+
+  const defaultStaff = [
+    {_id:'1',id:1,name:'Priya Sharma',role:'Senior Art Teacher',dept:'Teaching',salary:30000,mobile:'',bank:'',joining:'2024-01-01',active:true},
+    {_id:'2',id:2,name:'Ravi Meena',role:'Art Teacher',dept:'Teaching',salary:25000,mobile:'',bank:'',joining:'2024-01-01',active:true},
+    {_id:'3',id:3,name:'Sunita Agarwal',role:'Art Teacher',dept:'Teaching',salary:25000,mobile:'',bank:'',joining:'2024-03-01',active:true},
+    {_id:'4',id:4,name:'Deepak Verma',role:'Admin Assistant',dept:'Administration',salary:18000,mobile:'',bank:'',joining:'2024-01-01',active:true},
+    {_id:'5',id:5,name:'Anjali Gupta',role:'Receptionist',dept:'Administration',salary:16000,mobile:'',bank:'',joining:'2024-02-01',active:true},
+    {_id:'6',id:6,name:'Manish Soni',role:'Gallery Assistant',dept:'Gallery',salary:18000,mobile:'',bank:'',joining:'2024-04-01',active:true},
+    {_id:'7',id:7,name:'Kavita Joshi',role:'Junior Art Teacher',dept:'Teaching',salary:20000,mobile:'',bank:'',joining:'2024-05-01',active:true},
+    {_id:'8',id:8,name:'Rahul Sharma',role:'Support Staff',dept:'Support',salary:12000,mobile:'',bank:'',joining:'2024-01-01',active:true},
+    {_id:'9',id:9,name:'Pooja Mathur',role:'Graphic Designer',dept:'Administration',salary:30000,mobile:'',bank:'',joining:'2025-04-01',active:true},
+    {_id:'10',id:10,name:'Suresh Kumar',role:'Housekeeping',dept:'Support',salary:10000,mobile:'',bank:'',joining:'2024-01-01',active:true},
+  ];
+  for (const s of defaultStaff) await window.FB.set('staff', s._id, s);
+  showToast('Default staff loaded — please update with real details','ok');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+async function initApp() {
+  // Set dates
+  document.getElementById('tbDate').textContent = fmtDate(today());
+  document.getElementById('dashDate').textContent = fmtDate(today());
+  document.getElementById('attDate').value = today();
+  document.getElementById('sattDate').value = today();
+  document.getElementById('salMon').value = curMon();
+  document.getElementById('histMon').value = curMon();
+  document.getElementById('feeMon').value = curMon();
+
+  // Load all data into cache
+  await refreshCache();
+  await seedIfEmpty();
+  await refreshCache();
+
+  // Set up real-time listeners for live sync
+  window.FB.listen('staff',    data => { CACHE.staff    = data; renderStaff(); });
+  window.FB.listen('students', data => { CACHE.students = data; renderStudents(); updateOverdueBadge(); });
+  window.FB.listen('paintings',data => { CACHE.paintings= data; renderInv(); });
+  window.FB.listen('payments', data => { CACHE.payments = data; });
+
+  loadDash();
+  loadAtt();
+
+  // Close modals on overlay click
+  document.querySelectorAll('.mo').forEach(o => o.addEventListener('click', function(e){ if(e.target===this) this.classList.remove('on'); }));
+}
+
+async function refreshCache() {
+  const [staff, students, payments, paintings, progress] = await Promise.all([
+    window.FB.getAll('staff'), window.FB.getAll('students'),
+    window.FB.getAll('payments'), window.FB.getAll('paintings'),
+    window.FB.getAll('progress')
+  ]);
+  CACHE.staff    = staff;
+  CACHE.students = students;
+  CACHE.payments = payments;
+  CACHE.paintings= paintings;
+  CACHE.progress = progress;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════════
+const VIEW_TITLES = {dash:'Dashboard',att:'Daily Attendance',sal:'Salary Report',hist:'Att. History',staff:'Staff Directory',stud:'Students',fees:'Fee Collection',satt:'Student Attendance',inv:'Painting Inventory'};
+
+function goTo(name, btn) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('on'));
+  document.getElementById('v-'+name).classList.add('on');
+  document.querySelectorAll('.nav').forEach(b => b.classList.remove('on'));
+  if(btn) btn.classList.add('on');
+  document.getElementById('tbTitle').textContent = VIEW_TITLES[name] || name;
+  closeSB();
+  if(name==='dash')  loadDash();
+  if(name==='att')   loadAtt();
+  if(name==='sal')   loadSal();
+  if(name==='hist')  loadHist();
+  if(name==='staff') renderStaff();
+  if(name==='stud')  renderStudents();
+  if(name==='fees')  loadFees();
+  if(name==='satt')  loadSAtt();
+  if(name==='inv')   renderInv();
+}
+function toggleSB(){ document.getElementById('sidebar').classList.toggle('on'); document.getElementById('sbOverlay').classList.toggle('on'); }
+function closeSB(){  document.getElementById('sidebar').classList.remove('on'); document.getElementById('sbOverlay').classList.remove('on'); }
+
+// ═══════════════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════════════
+async function loadDash() {
+  const td = today(), cm = curMon();
+  const staff = CACHE.staff.filter(s=>s.active);
+
+  // Staff present today — fetch from Firebase
+  const attToday = await window.FB.get('attendance', td) || {};
+  const present = staff.filter(s=>attToday[s._id||s.id]?.status==='P').length;
+  document.getElementById('ds-pres').textContent = present+'/'+staff.length;
+
+  const students = CACHE.students.filter(s=>s.active);
+  document.getElementById('ds-stud').textContent = students.length;
+
+  const payments = CACHE.payments.filter(p=>p.forMonth===cm);
+  const collected = payments.reduce((s,p)=>s+Number(p.amount),0);
+  document.getElementById('ds-col').textContent = inr(collected);
+
+  const overdue = students.filter(s=>getFeeStatus(s).status==='overdue');
+  document.getElementById('ds-over').textContent = overdue.length;
+
+  const avail = CACHE.paintings.filter(p=>p.status==='Available');
+  document.getElementById('ds-art').textContent = avail.length;
+
+  // Alerts
+  const alerts = [];
+  if(!Object.keys(attToday).length)
+    alerts.push({t:'w',msg:"Today's staff attendance not marked yet",sub:'Go to Daily Attendance',nav:'att'});
+  overdue.forEach(s=>{
+    const fs=getFeeStatus(s);
+    alerts.push({t:'e',msg:`${s.name} — fee overdue`,sub:`${inr(s.fee)} due since ${fmtShort(fs.dueDate)}`,nav:'stud'});
+  });
+  students.filter(s=>getFeeStatus(s).status==='due-soon').forEach(s=>{
+    alerts.push({t:'w',msg:`${s.name} — fee due soon`,sub:`${inr(s.fee)} due on ${fmtShort(getFeeStatus(s).dueDate)}`,nav:'fees'});
+  });
+
+  const al = document.getElementById('alertList');
+  if(!alerts.length){ al.innerHTML='<div style="color:var(--green);font-size:13px">✅ No action items — all clear!</div>'; return; }
+  al.innerHTML = alerts.map(a=>`
+    <div class="ali ${a.t==='w'?'w':a.t==='i'?'i':''}">
+      <div class="ali-dot ${a.t==='w'?'w':a.t==='i'?'i':''}"></div>
+      <div class="ali-txt">${a.msg}<small>${a.sub||''}</small></div>
+      ${a.nav?`<button class="ali-act" onclick="goTo('${a.nav}',null)">View →</button>`:''}
+    </div>`).join('');
+}
+
+function updateOverdueBadge() {
+  const students = CACHE.students.filter(s=>s.active);
+  const n = students.filter(s=>getFeeStatus(s).status==='overdue').length;
+  const nb = document.getElementById('overdueNb');
+  nb.style.display = n > 0 ? '' : 'none';
+  if(n>0) nb.textContent = n;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MODULE 1 — STAFF ATTENDANCE
+// ═══════════════════════════════════════════════════════════════
+let todayAttData = {};
+
+async function loadAtt() {
+  const ds = document.getElementById('attDate').value || today();
+  document.getElementById('attDate').value = ds;
+  document.getElementById('attLbl').textContent = fmtDate(ds);
+  // Fetch from Firebase
+  const saved = await window.FB.get('attendance', ds) || {};
+  todayAttData = { ...saved };
+  renderAttTable();
+  updateAttStats();
+}
+
+function renderAttTable() {
+  const staff = CACHE.staff.filter(s=>s.active);
+  document.getElementById('attBody').innerHTML = staff.map((s,i) => {
+    const id = String(s._id||s.id);
+    const st = todayAttData[id] || {status:'',note:''};
+    const btns = ['P','H','A','L'].map(c => {
+      const lbl={P:'Present',H:'Half',A:'Absent',L:'Leave'}[c];
+      return `<button class="ab ${st.status===c?'s'+c:''}" onclick="setStAtt('${id}','${c}',this)">${lbl}</button>`;
+    }).join('');
+    return `<tr>
+      <td class="center muted">${i+1}</td>
+      <td><div class="bold">${s.name}</div><div class="muted">${s.role}</div></td>
+      <td><div class="ag">${btns}</div></td>
+      <td><input value="${st.note||''}" onchange="setAttNote('${id}',this.value)"
+        style="border:1px solid var(--grll);padding:5px 9px;font-size:12px;width:100%;max-width:180px;background:var(--C);border-radius:var(--r);outline:none" placeholder="Note…"></td>
+    </tr>`;
+  }).join('');
+}
+
+function setStAtt(id, code, btn) {
+  if(!todayAttData[id]) todayAttData[id]={status:'',note:''};
+  todayAttData[id].status = todayAttData[id].status===code ? '' : code;
+  btn.closest('tr').querySelectorAll('.ab').forEach(b=>{
+    const c={Present:'P',Half:'H',Absent:'A',Leave:'L'}[b.textContent.trim()]||'';
+    b.className='ab'+(todayAttData[id].status===c?' s'+c:'');
+  });
+  updateAttStats();
+}
+function setAttNote(id, note){ if(!todayAttData[id])todayAttData[id]={status:'',note:''}; todayAttData[id].note=note; }
+function updateAttStats(){
+  const c={P:0,H:0,A:0,L:0,N:0};
+  CACHE.staff.filter(s=>s.active).forEach(s=>{ const st=todayAttData[String(s._id||s.id)]?.status||''; if(!st)c.N++;else c[st]=(c[st]||0)+1; });
+  ['P','H','A','L','N'].forEach(k=>document.getElementById('a'+k).textContent=c[k]||0);
+}
+function markAllP(){
+  CACHE.staff.filter(s=>s.active).forEach(s=>{ const id=String(s._id||s.id); if(!todayAttData[id])todayAttData[id]={status:'',note:''}; todayAttData[id].status='P'; });
+  renderAttTable(); updateAttStats();
+}
+async function saveAtt(){
+  const ds = document.getElementById('attDate').value || today();
+  setSyncing();
+  const ok = await window.FB.set('attendance', ds, todayAttData);
+  ok ? setSynced() : setSyncErr();
+  showToast(ok?'✓ Attendance saved':'Saved locally — check connection', ok?'ok':'err');
+}
+
+// ── SALARY ──────────────────────────────────────────────────
+async function loadSal(){
+  const sm = document.getElementById('salMon').value || curMon();
+  document.getElementById('salMon').value = sm;
+  document.getElementById('salLbl').textContent = 'Salary Sheet — '+fmtMon(sm);
+  const staff = CACHE.staff.filter(s=>s.active);
+  const wD = wDays(sm), total = dimMon(sm);
+  const [y,m] = sm.split('-').map(Number);
+  let totPay=0, totDed=0;
+
+  // Fetch all attendance docs for this month in parallel
+  const attPromises = [];
+  for(let d=1;d<=total;d++){
+    const ds=`${sm}-${String(d).padStart(2,'0')}`;
+    attPromises.push(window.FB.get('attendance',ds).then(att=>[ds,att||{}]));
+  }
+  const attMap = Object.fromEntries(await Promise.all(attPromises));
+
+  const rows = staff.map((s,i)=>{
+    const id = String(s._id||s.id);
+    let P=0,H=0,A=0,L=0;
+    for(let d=1;d<=total;d++){
+      const ds=`${sm}-${String(d).padStart(2,'0')}`;
+      const dow=new Date(y,m-1,d).getDay();
+      if(dow===0)continue;
+      const st=attMap[ds][id]?.status||'';
+      if(st==='P')P++;else if(st==='H')H++;else if(st==='A')A++;else if(st==='L')L++;
+    }
+    const ded=Math.round(A*(s.salary/wD));
+    const net=Math.max(0,s.salary-ded);
+    totPay+=net; totDed+=ded;
+    const pct=wD>0?Math.round(((P+H*.5)/wD)*100):0;
+    return {s,P,H,A,L,ded,net,pct,wD,i};
+  });
+
+  document.getElementById('salTot').textContent=inr(totPay);
+  document.getElementById('salDed').textContent=inr(totDed);
+  document.getElementById('salWD').textContent=wD;
+  document.getElementById('salSt').textContent=staff.length;
+  document.getElementById('salFoot').textContent=inr(totPay);
+
+  const badge=p=>`<span class="bdg ${p>=90?'bg-g':p>=70?'bg-a':'bg-r'}">${p>=90?'Good':p>=70?'Fair':'Low'}</span>`;
+  document.getElementById('salBody').innerHTML=rows.map(r=>`<tr>
+    <td>${r.i+1}</td><td class="bold">${r.s.name}</td><td class="muted">${r.s.role}</td>
+    <td class="mono">${inr(r.s.salary)}</td><td class="center">${r.wD}</td>
+    <td class="center bold" style="color:var(--green)">${r.P}</td>
+    <td class="center bold" style="color:var(--amb)">${r.H}</td>
+    <td class="center bold" style="color:var(--red)">${r.A}</td>
+    <td class="mono" style="color:var(--red)">-${inr(r.ded)}</td>
+    <td class="mono bold" style="color:var(--M)">${inr(r.net)}</td>
+    <td>${badge(r.pct)}</td>
+  </tr>`).join('');
+
+  const sel=document.getElementById('slipSel');
+  sel.innerHTML='<option value="">Print Salary Slip →</option>'+staff.map(s=>`<option value="${s._id||s.id}">${s.name}</option>`).join('');
+  window._salRows=rows; window._salMon=sm;
+}
+
+function printSlip(){
+  const id = document.getElementById('slipSel').value;
+  if(!id){showToast('Select a staff member first');return;}
+  const r=(window._salRows||[]).find(x=>String(x.s._id||x.s.id)===String(id));
+  if(!r)return;
+  const sm=window._salMon;
+  document.getElementById('printZone').innerHTML=`<div style="font-family:sans-serif;max-width:460px;border:2px solid #7B1C2E">
+    <div style="background:#7B1C2E;color:#fff;padding:14px 18px;display:flex;justify-content:space-between">
+      <div><div style="font-size:18px;font-weight:700">KALANERI</div><div style="font-size:9px;opacity:.7;letter-spacing:2px">ART GALLERY & ACADEMY · JAIPUR</div></div>
+      <div style="text-align:right"><div style="font-size:10px;opacity:.7">SALARY SLIP</div><div style="font-size:13px;font-weight:700">${fmtMon(sm)}</div></div>
+    </div>
+    <div style="padding:13px 18px;border-bottom:1px solid #eee">
+      <div style="font-size:15px;font-weight:700">${r.s.name}</div>
+      <div style="font-size:12px;color:#666">${r.s.role} · ${r.s.dept}</div>
+    </div>
+    <div style="padding:13px 18px">
+      ${[['Working Days',r.wD],['Present',r.P],['Half Days',r.H],['Absent',r.A],['Leave',r.L],['Att %',Math.round(((r.P+r.H*.5)/r.wD)*100)+'%']].map(([l,v])=>`
+      <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0ebe5;font-size:12px">
+        <span style="color:#666">${l}</span><span style="font-weight:600">${v}</span></div>`).join('')}
+    </div>
+    <div style="background:#f9f5ee;padding:13px 18px">
+      ${[['Gross Salary',inr(r.s.salary)],['Deduction','-'+inr(r.ded)]].map(([l,v])=>`
+      <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px"><span style="color:#666">${l}</span><span>${v}</span></div>`).join('')}
+      <div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:2px solid #7B1C2E">
+        <span style="font-weight:700;font-size:14px;color:#7B1C2E">NET PAYABLE</span>
+        <span style="font-weight:700;font-size:17px;color:#7B1C2E">${inr(r.net)}</span>
+      </div>
+    </div>
+    <div style="padding:9px 18px;font-size:9px;color:#999;display:flex;justify-content:space-between;border-top:1px solid #eee">
+      <span>${new Date().toLocaleDateString('en-IN')}</span>
+      <span>Authorised: Mrs. Saumya Sharma, MD</span>
+    </div>
+  </div>`;
+  window.print();
+  setTimeout(()=>{document.getElementById('printZone').innerHTML=''},500);
+}
+
+// ── HISTORY ─────────────────────────────────────────────────
+async function loadHist(){
+  const hm = document.getElementById('histMon').value || curMon();
+  document.getElementById('histMon').value=hm;
+  document.getElementById('histLbl').textContent=fmtMon(hm)+' — Attendance Calendar';
+  const[y,m]=hm.split('-').map(Number);
+  const total=dimMon(hm);
+  const staff=CACHE.staff.filter(s=>s.active);
+
+  // Fetch all attendance for month
+  const attPromises=[];
+  for(let d=1;d<=total;d++){
+    const ds=`${hm}-${String(d).padStart(2,'0')}`;
+    attPromises.push(window.FB.get('attendance',ds).then(att=>[ds,att||{}]));
+  }
+  const attMap=Object.fromEntries(await Promise.all(attPromises));
+
+  const heads=[];
+  for(let d=1;d<=total;d++){
+    const isSun=new Date(y,m-1,d).getDay()===0;
+    heads.push(`<th style="${isSun?'opacity:.4':''}font-size:9px">${d}</th>`);
+  }
+  document.getElementById('calH').innerHTML=`<tr><th class="nth">Staff / Day →</th>${heads.join('')}<th>P</th><th>½</th><th>A</th><th>L</th><th>%</th></tr>`;
+
+  let sumRows=[];
+  const calRows=staff.map(s=>{
+    const id=String(s._id||s.id);
+    let P=0,H=0,A=0,L=0;
+    const cells=[];
+    for(let d=1;d<=total;d++){
+      const ds=`${hm}-${String(d).padStart(2,'0')}`;
+      const dow=new Date(y,m-1,d).getDay();
+      if(dow===0){cells.push('<td class="cS">—</td>');continue;}
+      const st=attMap[ds][id]?.status||'';
+      if(st==='P')P++;else if(st==='H')H++;else if(st==='A')A++;else if(st==='L')L++;
+      const cls={P:'cP',H:'cH',A:'cA',L:'cL','':''}[st]||'';
+      cells.push(`<td class="${cls}">${{P:'P',H:'½',A:'A',L:'L','':''}[st]||''}</td>`);
+    }
+    const wD=wDays(hm), pct=wD>0?Math.round(((P+H*.5)/wD)*100):0;
+    sumRows.push({s,P,H,A,L,pct});
+    return `<tr><td class="ntd">${s.name}<br><span style="font-size:10px;color:var(--grl);font-weight:400">${s.role}</span></td>
+      ${cells.join('')}
+      <td style="background:var(--greenl);color:var(--green);font-weight:700">${P}</td>
+      <td style="background:var(--ambl);color:var(--amb);font-weight:700">${H}</td>
+      <td style="background:var(--redl);color:var(--red);font-weight:700">${A}</td>
+      <td style="background:var(--grll);color:var(--gr);font-weight:700">${L}</td>
+      <td class="cSum">${pct}%</td></tr>`;
+  });
+  document.getElementById('calB').innerHTML=calRows.join('');
+
+  const badge=p=>p>=90?'bg-g':p>=75?'bg-g':p>=60?'bg-a':'bg-r';
+  const lbl=p=>p>=90?'Excellent':p>=75?'Good':p>=60?'Fair':'Low';
+  document.getElementById('histSum').innerHTML=sumRows.map((r,i)=>`<tr>
+    <td>${i+1}</td><td class="bold">${r.s.name}</td><td class="muted">${r.s.role}</td>
+    <td class="center bold" style="color:var(--green)">${r.P}</td>
+    <td class="center bold" style="color:var(--amb)">${r.H}</td>
+    <td class="center bold" style="color:var(--red)">${r.A}</td>
+    <td class="center bold" style="color:var(--gr)">${r.L}</td>
+    <td class="center bold">${r.pct}%</td>
+    <td><span class="bdg ${badge(r.pct)}">${lbl(r.pct)}</span></td>
+  </tr>`).join('');
+}
+
+async function exportCSV(){
+  const hm=document.getElementById('histMon').value||curMon();
+  const[y,m]=hm.split('-').map(Number);
+  const total=dimMon(hm);
+  const staff=CACHE.staff.filter(s=>s.active);
+  const attPromises=[];
+  for(let d=1;d<=total;d++){
+    const ds=`${hm}-${String(d).padStart(2,'0')}`;
+    attPromises.push(window.FB.get('attendance',ds).then(att=>[ds,att||{}]));
+  }
+  const attMap=Object.fromEntries(await Promise.all(attPromises));
+  const days=Array.from({length:total},(_,i)=>String(i+1).padStart(2,'0'));
+  const header=['Name','Role',...days,'P','H','A','L','Att%'];
+  const rows=staff.map(s=>{
+    const id=String(s._id||s.id);
+    let P=0,H=0,A=0,L=0;
+    const cells=days.map(dd=>{
+      const dow=new Date(y,m-1,parseInt(dd)).getDay();
+      if(dow===0)return'SUN';
+      const st=attMap[`${hm}-${dd}`][id]?.status||'';
+      if(st==='P')P++;else if(st==='H')H++;else if(st==='A')A++;else if(st==='L')L++;
+      return st||'-';
+    });
+    const wD=wDays(hm), pct=wD>0?Math.round(((P+H*.5)/wD)*100):0;
+    return[s.name,s.role,...cells,P,H,A,L,pct+'%'];
+  });
+  const csv=[header,...rows].map(r=>r.join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download=`Kalaneri_Attendance_${hm}.csv`; a.click();
+}
+
+// ── STAFF CRUD ────────────────────────────────────────────────
+function renderStaff(){
+  const staff=CACHE.staff;
+  document.getElementById('staffCnt').textContent=`${staff.filter(s=>s.active).length} active · ${staff.filter(s=>!s.active).length} inactive`;
+  document.getElementById('staffBody').innerHTML=staff.map((s,i)=>`<tr>
+    <td>${i+1}</td><td class="bold">${s.name}</td><td class="muted">${s.role}</td>
+    <td><span class="bdg bg-b">${s.dept}</span></td>
+    <td class="mono">${inr(s.salary)}</td>
+    <td class="muted">${s.mobile||'—'}</td>
+    <td class="muted">${s.joining||'—'}</td>
+    <td><span class="bdg ${s.active?'bg-g':'bg-gr'}">${s.active?'Active':'Inactive'}</span></td>
+    <td>
+      <button class="btn bgh bxs" onclick="editStaff('${s._id||s.id}')">✏ Edit</button>
+      <button class="btn bgh bxs" onclick="toggleStaff('${s._id||s.id}')" style="margin-left:3px">${s.active?'Deactivate':'Activate'}</button>
+    </td>
+  </tr>`).join('');
+}
+function openStaffMo(id=null){
+  document.getElementById('moStaffT').textContent=id?'Edit Staff':'Add Staff';
+  document.getElementById('sf-id').value=id||'';
+  const s=id?CACHE.staff.find(x=>String(x._id||x.id)===String(id)):null;
+  document.getElementById('sf-n').value=s?.name||'';
+  document.getElementById('sf-r').value=s?.role||'';
+  document.getElementById('sf-d').value=s?.dept||'Teaching';
+  document.getElementById('sf-s').value=s?.salary||'';
+  document.getElementById('sf-j').value=s?.joining||'';
+  document.getElementById('sf-m').value=s?.mobile||'';
+  document.getElementById('sf-b').value=s?.bank||'';
+  openMo('moStaff');
+}
+function editStaff(id){ openStaffMo(id); }
+async function saveStaff(){
+  const name=document.getElementById('sf-n').value.trim();
+  const role=document.getElementById('sf-r').value.trim();
+  const salary=parseFloat(document.getElementById('sf-s').value)||0;
+  if(!name||!role||!salary){showToast('Name, Role & Salary required');return;}
+  const editId=document.getElementById('sf-id').value;
+  const id=editId||uid();
+  const existing=editId?CACHE.staff.find(x=>String(x._id||x.id)===String(editId)):null;
+  const data={_id:String(id),id:parseInt(id)||0,name,role,salary,
+    dept:document.getElementById('sf-d').value,
+    joining:document.getElementById('sf-j').value,
+    mobile:document.getElementById('sf-m').value,
+    bank:document.getElementById('sf-b').value,
+    active:existing?existing.active:true};
+  setSyncing();
+  const ok=await window.FB.set('staff',id,data);
+  ok?setSynced():setSyncErr();
+  closeMo('moStaff');
+  showToast(ok?'✓ Staff saved':'Error saving — check connection',ok?'ok':'err');
+}
+async function toggleStaff(id){
+  const s=CACHE.staff.find(x=>String(x._id||x.id)===String(id));
+  if(!s)return;
+  const updated={...s,active:!s.active};
+  setSyncing();
+  await window.FB.set('staff',id,updated);
+  setSynced();
+  showToast(updated.active?'Staff activated':'Staff deactivated');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MODULE 2 — STUDENTS
+// ═══════════════════════════════════════════════════════════════
+let studFilter='all';
+function setSF(f,btn){ studFilter=f; document.querySelectorAll('#studFilts .fb').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); renderStudents(); }
+
+function getFeeStatus(s){
+  const cm=curMon();
+  const paid=CACHE.payments.find(p=>String(p.studentId)===String(s._id||s.id)&&p.forMonth===cm);
+  const now=new Date();
+  const dueDate=new Date(now.getFullYear(),now.getMonth(),s.dueDay||1);
+  const ds=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(s.dueDay||1).padStart(2,'0')}`;
+  if(paid)return{status:'paid',dueDate:ds,paidDate:paid.date,amount:paid.amount};
+  if(now>dueDate)return{status:'overdue',dueDate:ds};
+  if((dueDate-now)/(86400000)<=5)return{status:'due-soon',dueDate:ds};
+  return{status:'upcoming',dueDate:ds};
+}
+
+function renderStudents(){
+  let list=CACHE.students.filter(s=>s.active);
+  const q=document.getElementById('studSrch').value.toLowerCase();
+  if(q)list=list.filter(s=>(s.name||'').toLowerCase().includes(q)||(s.parent||'').toLowerCase().includes(q)||(s.mobile||'').includes(q));
+  if(studFilter==='overdue')list=list.filter(s=>getFeeStatus(s).status==='overdue');
+  else if(studFilter==='paid')list=list.filter(s=>getFeeStatus(s).status==='paid');
+  else if(studFilter==='due-soon')list=list.filter(s=>getFeeStatus(s).status==='due-soon');
+
+  const allActive=CACHE.students.filter(s=>s.active);
+  const overduelist=allActive.filter(s=>getFeeStatus(s).status==='overdue');
+  const collected=CACHE.payments.filter(p=>p.forMonth===curMon()).reduce((s,p)=>s+Number(p.amount),0);
+  document.getElementById('stT').textContent=allActive.length;
+  document.getElementById('stC').textContent=inr(collected);
+  document.getElementById('stOA').textContent=inr(overduelist.reduce((s,x)=>s+Number(x.fee),0));
+  document.getElementById('stOC').textContent=overduelist.length;
+  document.getElementById('studCnt').textContent=`${allActive.length} active students`;
+
+  const sB=s=>({paid:'<span class="bdg bg-g">Paid</span>',overdue:'<span class="bdg bg-r">Overdue</span>','due-soon':'<span class="bdg bg-a">Due Soon</span>',upcoming:'<span class="bdg bg-gr">Upcoming</span>'}[s]||'');
+  const pC={Beginner:'bg-gr',Elementary:'bg-b',Intermediate:'bg-a',Advanced:'bg-g',Professional:'bg-g'};
+
+  document.getElementById('studBody').innerHTML=list.map((s,i)=>{
+    const fs=getFeeStatus(s);
+    return `<tr>
+      <td>${i+1}</td>
+      <td>
+        <div class="bold">${s.name}</div>
+        <div class="muted">${s.age?s.age+' yrs · ':''}<span style="color:var(--M)">${s.parent||''}</span></div>
+        <div class="muted" style="font-size:11px">📞 ${s.mobile}${s.smobile?' / '+s.smobile:''}</div>
+        ${s.address?`<div class="muted" style="font-size:11px">📍 ${s.address}</div>`:''}
+        <span class="bdg ${pC[s.progress||'Beginner']||'bg-gr'}" style="margin-top:3px;display:inline-block">${s.progress||'Beginner'}</span>
+      </td>
+      <td><div class="bold" style="font-size:12px">${s.course||'—'}</div><div class="muted" style="font-size:11px">⏰ ${s.batch||'—'}</div>${s.medium?`<div class="muted" style="font-size:11px">🎨 ${s.medium}</div>`:''}</td>
+      <td class="muted" style="font-size:12px">${s.teacher||'—'}</td>
+      <td class="mono bold">${inr(s.fee)}</td>
+      <td class="muted center">${s.dueDay?s.dueDay+'th':'—'}</td>
+      <td class="muted">${fs.paidDate?fmtShort(fs.paidDate):'—'}</td>
+      <td>${sB(fs.status)}</td>
+      <td class="mono ${fs.status==='overdue'?'bold':''}" style="${fs.status==='overdue'?'color:var(--red)':''}">${fs.status==='paid'?'—':inr(s.fee)}</td>
+      <td style="white-space:nowrap">
+        <button class="btn bgr bxs" onclick="openPayMo('${s._id||s.id}')">💳 Pay</button>
+        <button class="btn bgh bxs" onclick="editStudent('${s._id||s.id}')" style="margin-left:3px">✏</button>
+      </td>
+    </tr>`;
+  }).join('');
+  updateOverdueBadge();
+}
+
+function openStudMo(id=null){
+  document.getElementById('moStudT').textContent=id?'Edit Student':'Add Student';
+  document.getElementById('st-id').value=id||'';
+  const s=id?CACHE.students.find(x=>String(x._id||x.id)===String(id)):null;
+  document.getElementById('st-n').value=s?.name||'';
+  document.getElementById('st-a').value=s?.age||'';
+  document.getElementById('st-j').value=s?.joining||today();
+  document.getElementById('st-pn').value=s?.parent||'';
+  document.getElementById('st-m').value=s?.mobile||'';
+  document.getElementById('st-sm').value=s?.smobile||'';
+  document.getElementById('st-addr').value=s?.address||'';
+  document.getElementById('st-c').value=s?.course||'Studio';
+  document.getElementById('st-bt').value=s?.batch||'Mon-Wed-Fri · 5pm–7pm';
+  document.getElementById('st-f').value=s?.fee||'';
+  document.getElementById('st-dd').value=s?.dueDay||1;
+  document.getElementById('st-med').value=s?.medium||'';
+  document.getElementById('st-t').value=s?.teacher||'';
+  document.getElementById('st-pr').value=s?.progress||'Beginner';
+  document.getElementById('st-nt').value=s?.note||'';
+  openMo('moStud');
+}
+function editStudent(id){ openStudMo(id); }
+function autoFee(){
+  const map={Foundation:1800,Studio:2500,Atelier:3500};
+  const c=document.getElementById('st-c').value;
+  if(map[c]) document.getElementById('st-f').value=map[c];
+}
+async function saveStudent(){
+  const name=document.getElementById('st-n').value.trim();
+  const mobile=document.getElementById('st-m').value.trim();
+  const fee=parseFloat(document.getElementById('st-f').value)||0;
+  if(!name||!mobile||!fee){showToast('Name, Mobile & Fee required');return;}
+  const editId=document.getElementById('st-id').value;
+  const id=editId||uid();
+  const data={_id:String(id),id:String(id),name,mobile,fee,
+    age:parseInt(document.getElementById('st-a').value)||0,
+    parent:document.getElementById('st-pn').value.trim(),
+    smobile:document.getElementById('st-sm').value.trim(),
+    address:document.getElementById('st-addr').value.trim(),
+    course:document.getElementById('st-c').value,
+    batch:document.getElementById('st-bt').value,
+    medium:document.getElementById('st-med').value,
+    teacher:document.getElementById('st-t').value.trim(),
+    progress:document.getElementById('st-pr').value,
+    dueDay:parseInt(document.getElementById('st-dd').value)||1,
+    joining:document.getElementById('st-j').value||today(),
+    note:document.getElementById('st-nt').value,
+    active:true};
+  setSyncing();
+  const ok=await window.FB.set('students',id,data);
+  ok?setSynced():setSyncErr();
+  closeMo('moStud');
+  showToast(ok?'✓ Student saved':'Error saving',ok?'ok':'err');
+}
+
+// ── PAYMENTS ──────────────────────────────────────────────────
+function openPayMo(studentId){
+  const s=CACHE.students.find(x=>String(x._id||x.id)===String(studentId));
+  if(!s)return;
+  document.getElementById('py-sid').value=studentId;
+  document.getElementById('py-sn').value=s.name;
+  document.getElementById('py-a').value=s.fee;
+  document.getElementById('py-d').value=today();
+  document.getElementById('py-mo').value=curMon();
+  document.getElementById('py-n').value='';
+  openMo('moPay');
+}
+async function savePay(){
+  const sid=document.getElementById('py-sid').value;
+  const amt=parseFloat(document.getElementById('py-a').value)||0;
+  if(!sid||!amt){showToast('Amount required');return;}
+  const id=uid();
+  const s=CACHE.students.find(x=>String(x._id||x.id)===String(sid));
+  const data={_id:id,studentId:sid,studentName:s?.name||'',amount:amt,
+    mode:document.getElementById('py-m').value,
+    date:document.getElementById('py-d').value||today(),
+    forMonth:document.getElementById('py-mo').value||curMon(),
+    note:document.getElementById('py-n').value};
+  setSyncing();
+  const ok=await window.FB.set('payments',id,data);
+  ok?setSynced():setSyncErr();
+  closeMo('moPay');
+  showToast(ok?'✓ Payment recorded — '+inr(amt):'Error saving payment',ok?'ok':'err');
+}
+
+async function loadFees(){
+  const fm=document.getElementById('feeMon').value||curMon();
+  document.getElementById('feeMon').value=fm;
+  const allPay=CACHE.payments;
+  const fmPay=allPay.filter(p=>p.forMonth===fm);
+  const students=CACHE.students.filter(s=>s.active);
+  const collected=fmPay.reduce((s,p)=>s+Number(p.amount),0);
+  const expected=students.reduce((s,x)=>s+Number(x.fee),0);
+  document.getElementById('fCol').textContent=inr(collected);
+  document.getElementById('fPen').textContent=inr(Math.max(0,expected-collected));
+  document.getElementById('fTxn').textContent=fmPay.length;
+  document.getElementById('fExp').textContent=inr(expected);
+  document.getElementById('feeBody').innerHTML=fmPay.length?fmPay.map((p,i)=>`<tr>
+    <td>${i+1}</td><td class="muted">${fmtShort(p.date)}</td>
+    <td class="bold">${p.studentName||'—'}</td>
+    <td class="mono bold" style="color:var(--green)">${inr(p.amount)}</td>
+    <td><span class="bdg bg-b">${p.mode}</span></td>
+    <td class="muted">${fmtMon(p.forMonth)}</td>
+    <td class="muted">${p.note||'—'}</td>
+    <td><button class="btn bgh bxs" onclick="delPay('${p._id}')" style="color:var(--red)">✕</button></td>
+  </tr>`).join(''):'<tr><td colspan="8" style="text-align:center;color:var(--grl);padding:24px">No payments this month</td></tr>';
+}
+
+async function delPay(id){
+  if(!confirm('Delete this payment?'))return;
+  setSyncing();
+  await window.FB.del('payments',id);
+  setSynced();
+  await refreshCache();
+  loadFees(); renderStudents();
+  showToast('Payment deleted');
+}
+
+// ── STUDENT ATTENDANCE ────────────────────────────────────────
+let sattData={};
+async function loadSAtt(){
+  const ds=document.getElementById('sattDate').value||today();
+  document.getElementById('sattDate').value=ds;
+  document.getElementById('sattLbl').textContent=fmtDate(ds);
+  const saved=await window.FB.get('sattendance',ds)||{};
+  sattData={...saved};
+  const students=CACHE.students.filter(s=>s.active);
+  document.getElementById('sattBody').innerHTML=students.map((s,i)=>{
+    const id=String(s._id||s.id);
+    const st=sattData[id]?.status||'';
+    const btns=['P','A','L'].map(c=>{
+      const lbl={P:'Present',A:'Absent',L:'Leave'}[c];
+      return `<button class="ab ${st===c?'s'+c:''}" onclick="setSAtt('${id}','${c}',this)">${lbl}</button>`;
+    }).join('');
+    return `<tr>
+      <td class="center muted">${i+1}</td>
+      <td><div class="bold">${s.name}</div><div class="muted">${s.parent?' · '+s.parent:''} ${s.mobile}</div></td>
+      <td class="muted">${s.course||'—'} · ${s.batch||'—'}</td>
+      <td><div class="ag">${btns}</div></td>
+    </tr>`;
+  }).join('');
+}
+function setSAtt(id,code,btn){
+  if(!sattData[id])sattData[id]={status:''};
+  sattData[id].status=sattData[id].status===code?'':code;
+  btn.closest('tr').querySelectorAll('.ab').forEach(b=>{
+    const c={Present:'P',Absent:'A',Leave:'L'}[b.textContent.trim()]||'';
+    b.className='ab'+(sattData[id].status===c?' s'+c:'');
+  });
+}
+function markAllSP(){
+  CACHE.students.filter(s=>s.active).forEach(s=>{const id=String(s._id||s.id);if(!sattData[id])sattData[id]={status:''};sattData[id].status='P';});
+  loadSAtt();
+}
+async function saveSAtt(){
+  const ds=document.getElementById('sattDate').value||today();
+  setSyncing();
+  const ok=await window.FB.set('sattendance',ds,sattData);
+  ok?setSynced():setSyncErr();
+  showToast(ok?'✓ Student attendance saved':'Error saving',ok?'ok':'err');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MODULE 3 — PAINTING INVENTORY
+// ═══════════════════════════════════════════════════════════════
+function renderInv(){
+  const f=document.getElementById('invFilt').value;
+  const paintings=CACHE.paintings;
+  const list=f==='all'?paintings:paintings.filter(p=>p.status===f);
+  const avail=paintings.filter(p=>p.status==='Available');
+  const sold=paintings.filter(p=>p.status==='Sold');
+  document.getElementById('invT').textContent=paintings.length;
+  document.getElementById('invA').textContent=avail.length;
+  document.getElementById('invS').textContent=sold.length;
+  document.getElementById('invV').textContent=inr(avail.reduce((s,p)=>s+Number(p.price),0));
+  document.getElementById('invCnt').textContent=`${paintings.length} artworks`;
+  const sc={Available:'bg-g',Sold:'bg-r',Reserved:'bg-a','On Display':'bg-b'};
+  document.getElementById('invGrid').innerHTML=list.map(p=>`
+    <div class="pc">
+      ${p.photo?`<img class="pi" src="${p.photo}" alt="${p.title}">`:`<div class="pp">🖼</div>`}
+      <div class="pinfo">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:3px">
+          <div class="ptt" title="${p.title}">${p.title}</div>
+          <span class="bdg ${sc[p.status]||'bg-gr'}" style="flex-shrink:0;margin-left:5px">${p.status}</span>
+        </div>
+        <div class="pm">${p.artist} · ${p.medium}${p.size?' · '+p.size:''}</div>
+        <div class="ppr">${inr(p.price)}</div>
+        <div class="pact">
+          <button class="btn bgh bxs" onclick="editPaint('${p._id||p.id}')">✏ Edit</button>
+          <select class="fi" style="padding:3px 7px;font-size:11px;flex:1;margin-left:5px" onchange="changeStatus('${p._id||p.id}',this.value)">
+            ${['Available','Reserved','On Display','Sold'].map(s=>`<option ${s===p.status?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+async function changeStatus(id,status){
+  const p=CACHE.paintings.find(x=>String(x._id||x.id)===String(id));
+  if(!p)return;
+  setSyncing();
+  await window.FB.set('paintings',id,{...p,status});
+  setSynced();
+  showToast('Status → '+status,'ok');
+}
+
+function openPaintMo(id=null){
+  document.getElementById('moPaintT').textContent=id?'Edit Painting':'Add Painting';
+  document.getElementById('pt-id').value=id||'';
+  const p=id?CACHE.paintings.find(x=>String(x._id||x.id)===String(id)):null;
+  document.getElementById('pt-t').value=p?.title||'';
+  document.getElementById('pt-ar').value=p?.artist||'';
+  document.getElementById('pt-m').value=p?.medium||'Painting';
+  document.getElementById('pt-sz').value=p?.size||'';
+  document.getElementById('pt-yr').value=p?.year||new Date().getFullYear();
+  document.getElementById('pt-pr').value=p?.price||'';
+  document.getElementById('pt-st').value=p?.status||'Available';
+  document.getElementById('pt-d').value=p?.desc||'';
+  document.getElementById('pt-ph').value='';
+  document.getElementById('pt-prev').style.display='none';
+  if(p?.photo){document.getElementById('pt-prev').style.display='block';document.getElementById('pt-prev-img').src=p.photo;}
+  openMo('moPaint');
+}
+function editPaint(id){ openPaintMo(id); }
+function prevPhoto(){
+  const file=document.getElementById('pt-ph').files[0];
+  if(!file)return;
+  // Compress image for Firestore (base64 < 900KB limit)
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      const canvas=document.createElement('canvas');
+      const MAX=800;
+      let{width:w,height:h}=img;
+      if(w>MAX){h=h*(MAX/w);w=MAX;}
+      if(h>MAX){w=w*(MAX/h);h=MAX;}
+      canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      const compressed=canvas.toDataURL('image/jpeg',0.75);
+      document.getElementById('pt-prev-img').src=compressed;
+      document.getElementById('pt-prev').style.display='block';
+      window._pendingPhoto=compressed;
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+async function savePaint(){
+  const title=document.getElementById('pt-t').value.trim();
+  const artist=document.getElementById('pt-ar').value.trim();
+  const price=parseFloat(document.getElementById('pt-pr').value)||0;
+  if(!title||!artist||!price){showToast('Title, Artist & Price required');return;}
+  const editId=document.getElementById('pt-id').value;
+  const id=editId||uid();
+  const existing=editId?CACHE.paintings.find(p=>String(p._id||p.id)===String(editId)):null;
+  const data={_id:String(id),id:String(id),title,artist,price,
+    medium:document.getElementById('pt-m').value,
+    size:document.getElementById('pt-sz').value,
+    year:parseInt(document.getElementById('pt-yr').value)||2024,
+    status:document.getElementById('pt-st').value,
+    desc:document.getElementById('pt-d').value,
+    photo:window._pendingPhoto||(existing?.photo||'')};
+  window._pendingPhoto=null;
+  setSyncing();
+  const ok=await window.FB.set('paintings',id,data);
+  ok?setSynced():setSyncErr();
+  closeMo('moPaint');
+  showToast(ok?'✓ Painting saved':'Error saving',ok?'ok':'err');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MODAL & TOAST
+// ═══════════════════════════════════════════════════════════════
+function openMo(id){ document.getElementById(id).classList.add('on'); }
+function closeMo(id){ document.getElementById(id).classList.remove('on'); }
+let _tt;
+function showToast(msg,type=''){
+  const t=document.getElementById('toast');
+  document.getElementById('toastMsg').textContent=msg;
+  t.className='toast on'+(type==='ok'?' ok':type==='err'?' err':'');
+  clearTimeout(_tt);_tt=setTimeout(()=>t.classList.remove('on'),3500);
+}
+</script>
+</body>
+</html>
